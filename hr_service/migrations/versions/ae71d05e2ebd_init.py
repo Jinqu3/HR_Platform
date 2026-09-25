@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 08a1024b0f72
+Revision ID: ae71d05e2ebd
 Revises: 
-Create Date: 2026-09-24 13:29:04.284064
+Create Date: 2026-09-24 17:02:32.768445
 
 """
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '08a1024b0f72'
+revision: str = 'ae71d05e2ebd'
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -28,7 +28,7 @@ def upgrade() -> None:
     sa.Column('resume_path', sa.String(length=500), nullable=True, comment='Путь к файлу (S3)'),
     sa.Column('skills', sa.Text(), nullable=True, comment='Навыки соискателя'),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False, comment='Дата регистрации'),
-    sa.Column('id', sa.Integer(), autoincrement=False, nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email')
     )
@@ -36,29 +36,28 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=255), nullable=False, comment='Название компании'),
     sa.Column('description', sa.Text(), nullable=True, comment='Описание компании'),
     sa.Column('is_active', sa.Boolean(), nullable=False, comment='Активность вакансии'),
-    sa.Column('id', sa.Integer(), autoincrement=False, nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('vacancies',
     sa.Column('title', sa.String(length=255), nullable=False, comment='Название вакансии'),
     sa.Column('stack', sa.Text(), nullable=False, comment='Требуемый стек'),
     sa.Column('experience', sa.Float(), nullable=False, comment='Требуемый опыт. Формат: 2.5 = 2 года 6 месяцев'),
-    sa.Column('company_description', sa.Text(), nullable=True, comment='Описание компании'),
     sa.Column('requirements', sa.Text(), nullable=False, comment='Требования к вакансии'),
     sa.Column('salary', sa.Float(), nullable=True, comment='Заработная плата'),
     sa.Column('is_active', sa.Boolean(), nullable=False, comment='Активность вакансии'),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False, comment='Дата создания вакансии'),
-    sa.Column('company_id', sa.Integer(), nullable=False),
-    sa.Column('id', sa.Integer(), autoincrement=False, nullable=False),
+    sa.Column('company_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.ForeignKeyConstraint(['company_id'], ['companies.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('applications',
-    sa.Column('applicant_id', sa.Integer(), nullable=False),
-    sa.Column('vacancy_id', sa.Integer(), nullable=False),
+    sa.Column('applicant_id', sa.UUID(), nullable=False),
+    sa.Column('vacancy_id', sa.UUID(), nullable=False),
     sa.Column('status', sa.String(length=50), nullable=False, comment="Статус отклика: 'new', 'interview', 'rejected', 'hired'"),
     sa.Column('applied_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-    sa.Column('id', sa.Integer(), autoincrement=False, nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
     sa.ForeignKeyConstraint(['applicant_id'], ['applicants.id'], ),
     sa.ForeignKeyConstraint(['vacancy_id'], ['vacancies.id'], ),
     sa.PrimaryKeyConstraint('id')

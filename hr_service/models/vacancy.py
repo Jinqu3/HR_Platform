@@ -1,8 +1,9 @@
-
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import Boolean, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import UUID as SQLAlchemyUUID
 
 from hr_service.database import Base
 
@@ -20,9 +21,6 @@ class Vacancy(Base):
         nullable=False,
         comment="Требуемый опыт. Формат: 2.5 = 2 года 6 месяцев",
     )
-    company_description: Mapped[str] = mapped_column(
-        Text, nullable=True, comment="Описание компании"
-    )
     requirements: Mapped[str] = mapped_column(
         Text, nullable=False, comment="Требования к вакансии"
     )
@@ -35,7 +33,6 @@ class Vacancy(Base):
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), nullable=False, comment="Дата создания вакансии"
     )
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), nullable=False)
 
     company: Mapped["Company"] = relationship("Company", back_populates="vacancies")  # type: ignore  # noqa: F821
-

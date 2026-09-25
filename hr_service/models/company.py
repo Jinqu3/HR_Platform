@@ -20,3 +20,4 @@ class Company(Base):
     )
 
     vacancies: Mapped[list["Vacancy"]] = relationship("Vacancy", back_populates="company")  # type: ignore  # noqa: F821
+    recruiters: Mapped[list["Recruiter"]] = relationship("Recruiter", back_populates="company") # type: ignore  # noqa: F821

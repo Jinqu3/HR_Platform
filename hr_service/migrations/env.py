@@ -25,7 +25,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 from hr_service.database import Base
 from hr_service.models.applicant import Applicant  # noqa: F401
-from hr_service.models.applications import Application  # noqa: F401
+from hr_service.models.application import Application  # noqa: F401
 from hr_service.models.company import Company  # noqa: F401
 from hr_service.models.vacancy import Vacancy  # noqa: F401
 
