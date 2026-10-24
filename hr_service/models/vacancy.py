@@ -3,7 +3,6 @@ from uuid import UUID
 
 from sqlalchemy import Boolean, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.types import UUID as SQLAlchemyUUID
 
 from hr_service.database import Base
 
@@ -35,4 +34,4 @@ class Vacancy(Base):
     )
     company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), nullable=False)
 
-    company: Mapped["Company"] = relationship("Company", back_populates="vacancies")  # type: ignore  # noqa: F821
+    company_vacancy: Mapped["Company"] = relationship("Company", back_populates="vacancies")  # type: ignore  # noqa: F821

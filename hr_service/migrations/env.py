@@ -1,6 +1,7 @@
 import os
 import sys
 from logging.config import fileConfig
+
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
@@ -11,8 +12,12 @@ from hr_service.config import settings
 # access to the values within the .ini file in use.
 config = context.config
 
-config.set_main_option("sqlalchemy.url", settings.DB_URL_SYNC)
-print("DB URL:", repr(settings.DB_URL_SYNC))
+db_url = settings.DB_URL_SYNC
+if "?" not in db_url:
+    db_url += "?client_encoding=utf8"
+elif "client_encoding" not in db_url:
+    db_url += "&client_encoding=utf8"
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -27,6 +32,7 @@ from hr_service.database import Base
 from hr_service.models.applicant import Applicant  # noqa: F401
 from hr_service.models.application import Application  # noqa: F401
 from hr_service.models.company import Company  # noqa: F401
+from hr_service.models.recruiter import Recruiter  # noqa: F401
 from hr_service.models.vacancy import Vacancy  # noqa: F401
 
 target_metadata = Base.metadata

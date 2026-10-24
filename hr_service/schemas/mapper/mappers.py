@@ -1,5 +1,3 @@
-from schemas.mapper.base import DataMapper
-
 from hr_service.models.applicant import Applicant as ApplicantModel
 from hr_service.models.application import Application as ApplicationModel
 from hr_service.models.company import Company as CompanyModel
@@ -10,6 +8,8 @@ from hr_service.schemas.application import Application as ApplicationSchema
 from hr_service.schemas.company import Company
 from hr_service.schemas.recruiter import Recruiter
 from hr_service.schemas.vacancy import Vacancy
+
+from schemas.mapper.base import DataMapper
 
 
 class VacancyMapper(DataMapper):

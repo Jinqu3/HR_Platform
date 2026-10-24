@@ -1,10 +1,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body
-from schemas.company import CompanyCreate, CompanyPatch, CompanyUpdate
-from service.company import CompanyService
 
 from hr_service.api.dependencies import DBDep
+from schemas.company import CompanyCreate, CompanyPatch, CompanyUpdate
+from service.company import CompanyService
 
 router = APIRouter(prefix="/company", tags=["company"])
 

@@ -16,6 +16,9 @@ class Recruiter(Base):
     email: Mapped[str] = mapped_column(
         String(255), unique=True, nullable=False, comment="Email рекрутера"
     )
+    hashed_password: Mapped[str] = mapped_column(
+        String(255), nullable=True, comment="Хэш пароля"
+    )
     company_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("companies.id"), nullable=True, comment="ID компании"
     )
@@ -26,4 +29,4 @@ class Recruiter(Base):
         server_default=func.now(), nullable=False, comment="Дата создания"
     )
 
-    company: Mapped["Company"] = relationship("Company", backref="recruiters")  # type: ignore  # noqa: F821
+    company_recruiter: Mapped["Company"] = relationship("Company", back_populates="recruiters")  # type: ignore  # noqa: F821

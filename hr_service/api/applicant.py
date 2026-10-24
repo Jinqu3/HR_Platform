@@ -1,10 +1,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body
-from schemas.applicant import ApplicantCreate, ApplicantPatch, ApplicantUpdate
-from service.applicant import ApplicantService
 
 from hr_service.api.dependencies import DBDep
+from schemas.applicant import ApplicantCreate, ApplicantPatch, ApplicantUpdate
+from service.applicant import ApplicantService
 
 router = APIRouter(prefix="/applicant", tags=["applicant"])
 

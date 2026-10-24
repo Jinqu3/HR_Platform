@@ -1,0 +1,98 @@
+services:
+  hr_backend:
+    build:
+      context: .
+      dockerfile: hr_service/Dockerfile
+    container_name: hr_service
+    ports:
+      - "8000:8000"
+    env_file:
+      - hr_service/.env
+    environment:
+      - DATABASE_HOST=postgres
+      - CELERY_BROKER_HOST=rabbitmq
+      - CELERY_BACKEND_HOST=redis
+    volumes:
+      - ./hr_service:/app/hr_service
+      - ./frontend:/app/frontend
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+
+  ai_backend:
+    build:
+      context: .
+      dockerfile: ai_service/Dockerfile
+    dns:
+      - 77.88.8.8 # DNS Яндекса
+      - 77.88.8.1 # DNS Яндекса (альтернативный)
+      - 195.82.146.214 # DNS Сбера (ns1.sbercloud.ru)
+    env_file:
+      - ai_service/.env
+    environment:
+      - CELERY_BROKER_HOST=rabbitmq
+      - CELERY_BACKEND_HOST=redis
+    volumes:
+      - ./ai_service:/app/ai_service
+      - cv_tmp:/tmp/applications
+    depends_on:
+      - hr_backend
+      - postgres
+      - rabbitmq
+      - redis
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    env_file:
+      - hr_service/.env
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME:-hr_db_1}
+      - POSTGRES_USER=${DATABASE_USER:-postgres}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD:-adadod26}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3.12-alpine
+    container_name: rabbitmq
+    env_file:
+      - hr_service/.env
+    environment:
+      - RABBITMQ_DEFAULT_USER=${CELERY_BROKER_USER:-quest}
+      - RABBITMQ_DEFAULT_PASS=${CELERY_BROKER_PASSWORD:-quest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  flower:
+    image: mher/flower:latest
+    container_name: flower
+    environment:
+      - CELERY_BROKER_URL=amqp://quest:quest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - rabbitmq
+      - redis
+
+volumes:
+  redis_data:
+  postgres_data:
+  cv_tmp:

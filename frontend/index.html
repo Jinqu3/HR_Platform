@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR-Sieve — Платформа ИИ-рекрутинга и скрининга</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* ─── Toast Notifications ─── */
+        #toast-container {
+            position: fixed;
+            top: 1.25rem;
+            right: 1.25rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            pointer-events: none;
+        }
+        .toast {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            min-width: 280px;
+            max-width: 380px;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+            font-size: 0.875rem;
+            font-weight: 500;
+            line-height: 1.4;
+            pointer-events: all;
+            animation: toastIn 0.3s cubic-bezier(.21,1.02,.73,1) forwards;
+            backdrop-filter: blur(4px);
+        }
+        .toast.hiding {
+            animation: toastOut 0.3s ease forwards;
+        }
+        .toast-success { background: #ecfdf5; color: #065f46; border-left: 4px solid #10b981; }
+        .toast-error   { background: #fef2f2; color: #991b1b; border-left: 4px solid #ef4444; }
+        .toast-info    { background: #eff6ff; color: #1e40af; border-left: 4px solid #3b82f6; }
+        .toast-warn    { background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b; }
+        .toast-icon { font-size: 1.1rem; margin-top: 1px; flex-shrink: 0; }
+        .toast-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            cursor: pointer;
+            opacity: 0.5;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0 0 0 0.5rem;
+            color: inherit;
+            flex-shrink: 0;
+        }
+        .toast-close:hover { opacity: 1; }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(40px) scale(.95); }
+            to   { opacity: 1; transform: translateX(0)   scale(1);   }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateX(0)   scale(1);   max-height: 120px; }
+            to   { opacity: 0; transform: translateX(40px) scale(.95); max-height: 0; padding: 0; margin: 0; }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen flex flex-col">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        const _toastIcons = {
+            success: '<i class="fa-solid fa-circle-check toast-icon"></i>',
+            error:   '<i class="fa-solid fa-circle-xmark toast-icon"></i>',
+            info:    '<i class="fa-solid fa-circle-info toast-icon"></i>',
+            warn:    '<i class="fa-solid fa-triangle-exclamation toast-icon"></i>',
+        };
+
+        function toast(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = `toast toast-${type}`;
+            el.innerHTML = `
+                ${_toastIcons[type] || _toastIcons.info}
+                <span>${message}</span>
+                <button class="toast-close" onclick="this.closest('.toast') && _dismissToast(this.closest('.toast'))">&#x2715;</button>
+            `;
+            container.appendChild(el);
+            if (duration > 0) {
+                setTimeout(() => _dismissToast(el), duration);
+            }
+        }
+
+        function _dismissToast(el) {
+            if (!el || el.classList.contains('hiding')) return;
+            el.classList.add('hiding');
+            el.addEventListener('animationend', () => el.remove(), { once: true });
+        }
+    </script>
+
+    <!-- Header / Navbar -->
+
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 text-white p-2 rounded-xl shadow-md">
+                    <i class="fa-solid fa-robot text-xl"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold bg-gradient-to-r from-brand-600 to-indigo-800 bg-clip-text text-transparent">HR-Sieve</span>
+                    <span class="text-xs block text-gray-500 font-medium">ИИ-платформа рекрутинга</span>
+                </div>
+            </div>
+            
+            <nav class="hidden md:flex space-x-1" id="mainNavbar"></nav>
+
+            <div class="flex items-center space-x-3">
+                <div id="userInfoHeader" class="hidden text-xs font-semibold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg flex items-center space-x-2">
+                    <span id="headerUserRoleBadge" class="uppercase bg-brand-600 text-white px-2 py-0.5 rounded text-[10px]"></span>
+                    <span id="headerUserEmail"></span>
+                </div>
+                <button onclick="switchTab('auth')" id="nav-auth" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition flex items-center">
+                    <i class="fa-solid fa-right-to-bracket mr-2"></i>Войти / Регистрация
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- DASHBOARD TAB (HR ONLY) -->
+        <div id="tab-dashboard" class="tab-content hidden space-y-6">
+            <div class="bg-gradient-to-r from-brand-600 to-indigo-800 rounded-2xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center">
+                <div class="space-y-3 mb-6 md:mb-0">
+                    <h1 class="text-3xl font-extrabold tracking-tight">Панель управления рекрутера</h1>
+                    <p class="text-brand-100 max-w-xl text-sm leading-relaxed">
+                        Добро пожаловать в ATS HR-Sieve. Управляйте вакансиями компании, загружайте резюме и используйте ИИ-скоринг для найма лучших кандидатов.
+                    </p>
+                    <div class="flex space-x-4 pt-2">
+                        <button onclick="switchTab('screening')" class="bg-white text-brand-700 hover:bg-brand-50 px-5 py-2.5 rounded-xl font-semibold text-sm shadow transition">
+                            <i class="fa-solid fa-ranking-star mr-2"></i>Лидерборд & Скрининг
+                        </button>
+                        <button onclick="switchTab('vacancies')" class="bg-brand-700 hover:bg-brand-800 text-white border border-brand-500 px-5 py-2.5 rounded-xl font-semibold text-sm transition">
+                            <i class="fa-solid fa-briefcase mr-2"></i>Мои вакансии
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-white/10 backdrop-blur-md p-6 rounded-xl border border-white/20 text-center min-w-[220px]">
+                    <div class="text-3xl font-black" id="stat-vacancies">0</div>
+                    <div class="text-xs text-brand-200 uppercase tracking-wider font-semibold mt-1">Активных вакансий</div>
+                    <div class="text-3xl font-black mt-4" id="stat-applicants">0</div>
+                    <div class="text-xs text-brand-200 uppercase tracking-wider font-semibold mt-1">Кандидатов в базе</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COMPANIES TAB (HR ONLY) -->
+        <div id="tab-companies" class="tab-content hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Компании</h2>
+                    <p class="text-sm text-gray-500">Организации-работодатели</p>
+                </div>
+                <button onclick="openModal('companyModal')" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition">
+                    <i class="fa-solid fa-plus mr-2"></i>Добавить компанию
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Название</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Описание</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="companiesTableBody" class="divide-y divide-gray-200 bg-white text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- VACANCIES TAB -->
+        <div id="tab-vacancies" class="tab-content hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Открытые вакансии</h2>
+                    <p class="text-sm text-gray-500" id="vacanciesSubTitle">Кликните на вакансию для подробного просмотра и отклика</p>
+                </div>
+                <button id="createVacancyBtn" onclick="openModal('vacancyModal')" class="hidden bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition">
+                    <i class="fa-solid fa-plus mr-2"></i>Создать вакансию
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="vacanciesGrid"></div>
+        </div>
+
+        <!-- APPLICANTS TAB (HR ONLY) -->
+        <div id="tab-applicants" class="tab-content hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Кандидаты</h2>
+                    <p class="text-sm text-gray-500">База соискателей компании</p>
+                </div>
+                <button onclick="openModal('applicantModal')" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition">
+                    <i class="fa-solid fa-user-plus mr-2"></i>Добавить кандидата
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ФИО</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Телефон</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Резюме / Файл</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Дата</th>
+                        </tr>
+                    </thead>
+                    <tbody id="applicantsTableBody" class="divide-y divide-gray-200 bg-white text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- APPLICANT MY APPLICATIONS TAB (CANDIDATE ONLY) -->
+        <div id="tab-my-applications" class="tab-content hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Мои отклики</h2>
+                    <p class="text-sm text-gray-500">Статус рассмотрения ваших резюме и ИИ-оценка</p>
+                </div>
+                <button onclick="loadMyApplications()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition">
+                    <i class="fa-solid fa-rotate mr-2"></i>Обновить
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Вакансия ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ИИ-Скор (0-100)</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Статус</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Саммари / Резюме</th>
+                        </tr>
+                    </thead>
+                    <tbody id="myApplicationsTableBody" class="divide-y divide-gray-200 bg-white text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SCREENING & LEADERBOARD TAB (HR ONLY) -->
+        <div id="tab-screening" class="tab-content hidden space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Скрининг и Лидерборд откликов</h2>
+                    <p class="text-sm text-gray-500">ИИ-оценка резюме, суммарный отчёт и управление откликами</p>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <button onclick="analyzeAllApplications()" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition flex items-center">
+                        <i class="fa-solid fa-brain mr-2"></i>Проанализировать все (ИИ)
+                    </button>
+                    <button onclick="summarizeAllApplications()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition flex items-center">
+                        <i class="fa-solid fa-chart-pie mr-2"></i>Суммарный отчёт
+                    </button>
+                    <button onclick="openModal('uploadModal')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow transition flex items-center">
+                        <i class="fa-solid fa-file-arrow-up mr-2"></i>Загрузить резюме (PDF/DOCX)
+                    </button>
+                    <button onclick="loadLeaderboard()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition">
+                        <i class="fa-solid fa-rotate mr-2"></i>Обновить
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Bar Card -->
+            <div id="progressCard" class="hidden bg-white p-6 rounded-xl border border-indigo-100 shadow-sm">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-bold text-gray-800" id="progressTitle">Обрабатывается запрос...</span>
+                    <span class="text-xs font-semibold text-brand-600" id="progressPercent">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                    <div id="progressBar" class="bg-brand-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="text-xs text-gray-500 mt-2" id="progressDetails">ID задачи: <span id="batchIdSpan"></span></div>
+            </div>
+
+            <!-- Leaderboard Table -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-800"><i class="fa-solid fa-ranking-star text-amber-500 mr-2"></i>Рейтинг кандидатов и отклики</h3>
+                    <span class="text-xs bg-brand-50 text-brand-700 px-2.5 py-1 rounded-full font-semibold" id="leaderboardCount">0 откликов</span>
+                </div>
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ранг</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Кандидат ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Вакансия ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ИИ-Скор (0-100)</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Статус</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Действия (Анализ, Саммари, Резюме)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardTableBody" class="divide-y divide-gray-200 bg-white text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- AUTH TAB -->
+        <div id="tab-auth" class="tab-content space-y-8 max-w-4xl mx-auto">
+            <div class="text-center space-y-2">
+                <h2 class="text-3xl font-extrabold text-gray-900">Авторизация и Регистрация</h2>
+                <p class="text-sm text-gray-500">Выберите нужную форму ниже: Вход в систему, Регистрация HR или Регистрация соискателя</p>
+            </div>
+
+            <!-- Session Status Box -->
+            <div id="authStatusBox" class="hidden p-4 bg-brand-50 border border-brand-100 rounded-xl text-sm text-brand-800 flex justify-between items-center">
+                <div>
+                    <span class="font-semibold">Сеанс активен:</span> <span id="currentUserRole" class="uppercase font-bold"></span> (<span id="currentUserEmailSpan"></span>)
+                </div>
+                <button onclick="logout()" class="text-red-600 hover:text-red-800 text-xs font-semibold underline">Выйти</button>
+            </div>
+
+            <!-- 3 Columns for Login & Registrations -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- 1. Login Card -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-4 text-brand-600">
+                            <i class="fa-solid fa-right-to-bracket text-xl"></i>
+                            <h3 class="font-bold text-lg text-gray-900">Вход</h3>
+                        </div>
+                        <form id="formLogin" onsubmit="handleLogin(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Email</label>
+                                <input type="email" id="loginEmail" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="hr@company.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Пароль</label>
+                                <input type="password" id="loginPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="••••••••">
+                            </div>
+                            <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow transition">Войти</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 2. Register HR Card -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-4 text-emerald-600">
+                            <i class="fa-solid fa-user-tie text-xl"></i>
+                            <h3 class="font-bold text-lg text-gray-900">Регистрация HR</h3>
+                        </div>
+                        <form id="formRegHr" onsubmit="handleRegHr(event)" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">ФИО HR</label>
+                                <input type="text" id="regHrName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Иван Иванов">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Email</label>
+                                <input type="email" id="regHrEmail" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="hr@company.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Пароль</label>
+                                <input type="password" id="regHrPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="••••••••">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">ID Компании (UUID)</label>
+                                <input type="text" id="regHrCompanyId" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="UUID компании">
+                            </div>
+                            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow transition">Создать HR</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 3. Register Applicant Card -->
+                <div class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 mb-4 text-indigo-600">
+                            <i class="fa-solid fa-user-graduate text-xl"></i>
+                            <h3 class="font-bold text-lg text-gray-900">Регистрация Соискателя</h3>
+                        </div>
+                        <form id="formRegApp" onsubmit="handleRegApp(event)" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">ФИО</label>
+                                <input type="text" id="regAppName" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Петр Петров">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Email</label>
+                                <input type="email" id="regAppEmail" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="candidate@mail.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Телефон</label>
+                                <input type="text" id="regAppPhone" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="+7 999 123-45-67">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Пароль</label>
+                                <input type="password" id="regAppPassword" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="••••••••">
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow transition">Создать аккаунт</button>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODALS -->
+
+    <!-- Company Modal -->
+    <div id="companyModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                <h3 class="font-bold text-lg text-gray-900">Создать компанию</h3>
+                <button onclick="closeModal('companyModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="createCompany(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Название</label>
+                    <input type="text" id="companyTitle" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="ООО Инновации">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Описание</label>
+                    <textarea id="companyDesc" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Описание деятельности..."></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" onclick="closeModal('companyModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-semibold hover:bg-brand-700 shadow">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vacancy Modal -->
+    <div id="vacancyModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                <h3 class="font-bold text-lg text-gray-900">Создать вакансию</h3>
+                <button onclick="closeModal('vacancyModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="createVacancy(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Название позиции</label>
+                    <input type="text" id="vacTitle" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Senior Backend Developer">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Стек</label>
+                        <input type="text" id="vacStack" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Python, PostgreSQL">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Опыт (лет)</label>
+                        <input type="number" step="0.5" id="vacExp" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="3.0">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Зарплата (₽)</label>
+                        <input type="number" id="vacSalary" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="300000">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Компания</label>
+                        <select id="vacCompanyId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none bg-white"></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Требования</label>
+                    <textarea id="vacReq" rows="3" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Уверенное владение FastAPI..."></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" onclick="closeModal('vacancyModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-semibold hover:bg-brand-700 shadow">Создать</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Applicant Modal -->
+    <div id="applicantModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                <h3 class="font-bold text-lg text-gray-900">Добавить кандидата</h3>
+                <button onclick="closeModal('applicantModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="createApplicant(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">ФИО</label>
+                    <input type="text" id="appFullName" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="Иван Соискатель">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Email</label>
+                    <input type="email" id="appEmail" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="candidate@mail.ru">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Телефон</label>
+                    <input type="text" id="appPhone" class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none" placeholder="+7 999 000-00-00">
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" onclick="closeModal('applicantModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-semibold hover:bg-brand-700 shadow">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Resume Modal (HR Only) -->
+    <div id="uploadModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                <h3 class="font-bold text-lg text-gray-900">Загрузка резюме (PDF / DOCX)</h3>
+                <button onclick="closeModal('uploadModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="uploadResumeFile(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Вакансия вашей компании</label>
+                    <select id="uploadVacancyId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none bg-white"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Кандидат</label>
+                    <select id="uploadApplicantId" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none bg-white"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Файл резюме (PDF / DOCX)</label>
+                    <input type="file" id="uploadResumeFileObj" accept=".pdf,.docx,.doc" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" onclick="closeModal('uploadModal')" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Отмена</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow">Загрузить и запустить ИИ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vacancy Detail Modal -->
+    <div id="vacancyDetailModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl space-y-6 max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-start border-b border-gray-200 pb-4">
+                <div>
+                    <h3 id="detailTitle" class="font-extrabold text-2xl text-gray-900">-</h3>
+                    <p id="detailCompany" class="text-xs font-semibold text-brand-600 mt-1">-</p>
+                </div>
+                <button onclick="closeModal('vacancyDetailModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="flex-grow overflow-y-auto space-y-4 py-2">
+                <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl text-sm">
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase block">Требуемый опыт</span>
+                        <span id="detailExp" class="font-bold text-gray-900">-</span>
+                    </div>
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase block">Зарплата</span>
+                        <span id="detailSalary" class="font-bold text-gray-900">-</span>
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs font-semibold text-gray-500 uppercase block mb-1">Технологический стек</span>
+                    <div id="detailStack" class="bg-indigo-50 text-indigo-800 px-3 py-2 rounded-lg text-sm font-semibold"></div>
+                </div>
+                <div>
+                    <span class="text-xs font-semibold text-gray-500 uppercase block mb-1">Требования и описание</span>
+                    <div id="detailReq" class="bg-gray-50 p-4 rounded-xl text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"></div>
+                </div>
+
+                <!-- Apply Form for Applicants -->
+                <div id="applySection" class="hidden border-t border-gray-200 pt-4 space-y-4">
+                    <h4 class="font-bold text-gray-900"><i class="fa-solid fa-paper-plane text-brand-600 mr-2"></i>Откликнуться на вакансию</h4>
+                    <form onsubmit="submitApplicantApplication(event)" class="space-y-4">
+                        <input type="hidden" id="applyVacancyId">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Ваше резюме (PDF / DOCX)</label>
+                            <input type="file" id="applicantResumeFile" accept=".pdf,.docx,.doc" required class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+                        </div>
+                        <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow transition">Отправить резюме и откликнуться</button>
+                    </form>
+                </div>
+            </div>
+            <div class="flex justify-end pt-2 border-t border-gray-200">
+                <button onclick="closeModal('vacancyDetailModal')" class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-semibold transition">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Summary Modal -->
+    <div id="summaryModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                <h3 class="font-bold text-lg text-gray-900"><i class="fa-solid fa-brain text-brand-600 mr-2"></i>ИИ-Заключение по кандидату</h3>
+                <button onclick="closeModal('summaryModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="flex-grow overflow-y-auto space-y-4 py-2">
+                <div class="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl">
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase block">Кандидат / Отклик ID</span>
+                        <span id="modalCandidateName" class="font-bold text-gray-900">-</span>
+                    </div>
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase block">Вакансия</span>
+                        <a id="modalVacancyLink" href="#" class="font-semibold text-brand-600 hover:text-brand-800 hover:underline truncate block" title="">-</a>
+                    </div>
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase block">ИИ-Оценка</span>
+                        <span id="modalCandidateScore" class="font-extrabold text-brand-600 text-lg">-</span>
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs font-semibold text-gray-500 uppercase block mb-1">Отчет нейросети</span>
+                    <div id="modalCandidateText" class="bg-gray-900 text-gray-100 p-5 rounded-xl text-sm font-mono whitespace-pre-wrap leading-relaxed overflow-y-auto max-h-[50vh]"></div>
+                </div>
+            </div>
+            <div class="flex justify-between items-center pt-2 border-t border-gray-200">
+                <button id="modalDownloadResumeBtn" onclick="" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow transition flex items-center">
+                    <i class="fa-solid fa-download mr-2"></i>Скачать резюме
+                </button>
+                <button onclick="closeModal('summaryModal')" class="px-5 py-2 bg-brand-600 text-white rounded-lg text-sm font-semibold hover:bg-brand-700 shadow ml-auto">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        const API_BASE = 'http://localhost:8000';
+
+        let token = localStorage.getItem('hr_token') || '';
+        let currentRole = localStorage.getItem('hr_role') || '';
+        let currentUserData = JSON.parse(localStorage.getItem('hr_user_data') || '{}');
+        let selectedVacancy = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (token && !currentRole) {
+                await fetchMe();
+            }
+            renderNavbar();
+            applyRolePermissions();
+            loadVacancies();
+            if (!token) {
+                switchTab('auth');
+            } else if (currentRole === 'hr') {
+                loadDashboardStats();
+                loadCompanies();
+                loadApplicants();
+                loadLeaderboard();
+            } else if (currentRole === 'applicant') {
+                loadMyApplications();
+            }
+        });
+
+        async function fetchMe() {
+            try {
+                const res = await fetch(`${API_BASE}/auth/me`, {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    currentRole = json.role;
+                    currentUserData = json.data;
+                    localStorage.setItem('hr_role', currentRole);
+                    localStorage.setItem('hr_user_data', JSON.stringify(currentUserData));
+                } else {
+                    logout();
+                }
+            } catch (e) {
+                console.error('Failed to fetch /auth/me', e);
+            }
+        }
+
+        function renderNavbar() {
+            const nav = document.getElementById('mainNavbar');
+            nav.innerHTML = '';
+
+            if (currentRole === 'hr') {
+                nav.innerHTML = `
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-brand-600 bg-brand-50 transition"><i class="fa-solid fa-chart-line mr-1.5"></i>Дашборд</button>
+                    <button onclick="switchTab('companies')" id="nav-companies" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition"><i class="fa-solid fa-building mr-1.5"></i>Компании</button>
+                    <button onclick="switchTab('vacancies')" id="nav-vacancies" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition"><i class="fa-solid fa-briefcase mr-1.5"></i>Вакансии</button>
+                    <button onclick="switchTab('applicants')" id="nav-applicants" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition"><i class="fa-solid fa-users mr-1.5"></i>Кандидаты</button>
+                    <button onclick="switchTab('screening')" id="nav-screening" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition"><i class="fa-solid fa-ranking-star mr-1.5"></i>Скрининг & Лидерборд</button>
+                `;
+            } else if (currentRole === 'applicant') {
+                nav.innerHTML = `
+                    <button onclick="switchTab('vacancies')" id="nav-vacancies" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-brand-600 bg-brand-50 transition"><i class="fa-solid fa-briefcase mr-1.5"></i>Вакансии</button>
+                    <button onclick="switchTab('my-applications')" id="nav-my-applications" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition"><i class="fa-solid fa-file-lines mr-1.5"></i>Мои отклики</button>
+                `;
+            } else {
+                nav.innerHTML = `
+                    <button onclick="switchTab('vacancies')" id="nav-vacancies" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-brand-600 bg-brand-50 transition"><i class="fa-solid fa-briefcase mr-1.5"></i>Вакансии</button>
+                `;
+            }
+
+            const headerInfo = document.getElementById('userInfoHeader');
+            const roleBadge = document.getElementById('headerUserRoleBadge');
+            const headerEmail = document.getElementById('headerUserEmail');
+            const navAuth = document.getElementById('nav-auth');
+
+            if (token && currentRole) {
+                headerInfo.classList.remove('hidden');
+                roleBadge.textContent = currentRole === 'hr' ? 'HR Рекрутер' : 'Соискатель';
+                headerEmail.textContent = currentUserData.email || '';
+                navAuth.innerHTML = `<i class="fa-solid fa-user-check mr-2"></i>Профиль / Аккаунт`;
+            } else {
+                headerInfo.classList.add('hidden');
+                navAuth.innerHTML = `<i class="fa-solid fa-right-to-bracket mr-2"></i>Войти / Регистрация`;
+            }
+        }
+
+        function applyRolePermissions() {
+            const createVacBtn = document.getElementById('createVacancyBtn');
+            const subTitle = document.getElementById('vacanciesSubTitle');
+            if (currentRole === 'hr') {
+                if (createVacBtn) createVacBtn.classList.remove('hidden');
+                if (subTitle) subTitle.textContent = 'Управление вакансиями вашей компании';
+            } else {
+                if (createVacBtn) createVacBtn.classList.add('hidden');
+                if (subTitle) subTitle.textContent = 'Кликните на вакансию для подробного просмотра и отклика с резюме';
+            }
+        }
+
+        function switchTab(tabId) {
+            const hrOnlyTabs = ['dashboard', 'companies', 'applicants', 'screening'];
+            if (hrOnlyTabs.includes(tabId) && currentRole !== 'hr') {
+                toast('Этот раздел доступен только авторизованным HR-рекрутерам.', 'warn');
+                switchTab('auth');
+                return;
+            }
+
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            const targetTab = document.getElementById(`tab-${tabId}`);
+            if (targetTab) targetTab.classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('text-brand-600', 'bg-brand-50');
+                el.classList.add('text-gray-600', 'hover:text-gray-900', 'hover:bg-gray-100');
+            });
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-gray-600', 'hover:text-gray-900', 'hover:bg-gray-100');
+                activeBtn.classList.add('text-brand-600', 'bg-brand-50');
+            }
+
+            if (tabId === 'dashboard' && currentRole === 'hr') loadDashboardStats();
+            if (tabId === 'companies' && currentRole === 'hr') loadCompanies();
+            if (tabId === 'vacancies') loadVacancies();
+            if (tabId === 'applicants' && currentRole === 'hr') loadApplicants();
+            if (tabId === 'my-applications' && currentRole === 'applicant') loadMyApplications();
+            if (tabId === 'screening' && currentRole === 'hr') {
+                loadLeaderboard();
+                populateDropdowns();
+            }
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.remove('hidden');
+            document.getElementById(modalId).classList.add('flex');
+            if (modalId === 'vacancyModal' || modalId === 'uploadModal') {
+                populateDropdowns();
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('flex');
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        async function loadDashboardStats() {
+            if (currentRole !== 'hr') return;
+            try {
+                let vacUrl = `${API_BASE}/vacancy/`;
+                if (currentUserData.company_id) vacUrl += `?company_id=${currentUserData.company_id}`;
+                const [vacRes, appRes] = await Promise.all([
+                    fetch(vacUrl),
+                    fetch(`${API_BASE}/applicant/`)
+                ]);
+                const vacData = await vacRes.json();
+                const appData = await appRes.json();
+                document.getElementById('stat-vacancies').textContent = (vacData.data || []).length;
+                document.getElementById('stat-applicants').textContent = (appData.data || []).length;
+            } catch (e) {
+                console.error('Failed to load stats', e);
+            }
+        }
+
+        async function loadCompanies() {
+            if (currentRole !== 'hr') return;
+            try {
+                const res = await fetch(`${API_BASE}/company/`);
+                const json = await res.json();
+                const tbody = document.getElementById('companiesTableBody');
+                tbody.innerHTML = '';
+                (json.data || []).forEach(c => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="px-6 py-4 font-mono text-xs text-gray-500">${c.id}</td>
+                            <td class="px-6 py-4 font-semibold text-gray-900">${c.title}</td>
+                            <td class="px-6 py-4 text-gray-600">${c.description || '-'}</td>
+                            <td class="px-6 py-4"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">${c.is_active ? 'Активна' : 'Неактивна'}</span></td>
+                        </tr>
+                    `;
+                });
+            } catch (e) {
+                console.error('Failed to load companies', e);
+            }
+        }
+
+        async function loadVacancies() {
+            try {
+                let url = `${API_BASE}/vacancy/`;
+                if (currentRole === 'hr' && currentUserData.company_id) {
+                    url += `?company_id=${currentUserData.company_id}`;
+                }
+                const res = await fetch(url);
+                const json = await res.json();
+                const grid = document.getElementById('vacanciesGrid');
+                grid.innerHTML = '';
+                const vacancies = json.data || [];
+
+                if (vacancies.length === 0) {
+                    grid.innerHTML = `<div class="col-span-3 text-center py-12 text-gray-500">Нет открытых вакансий</div>`;
+                    return;
+                }
+
+                vacancies.forEach(v => {
+                    grid.innerHTML += `
+                        <div onclick="openVacancyDetail('${v.id}')" class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-brand-300 cursor-pointer transition flex flex-col justify-between space-y-4">
+                            <div>
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-bold text-lg text-gray-900">${v.title}</h3>
+                                    <span class="text-xs bg-brand-50 text-brand-700 px-2.5 py-1 rounded-full font-semibold">${v.experience} лет опыта</span>
+                                </div>
+                                <p class="text-xs text-brand-600 font-semibold mb-3"><i class="fa-solid fa-code mr-1"></i>${v.stack}</p>
+                                <p class="text-sm text-gray-600 line-clamp-3">${v.requirements}</p>
+                            </div>
+                            <div class="pt-4 border-t border-gray-100 flex justify-between items-center text-sm">
+                                <span class="font-bold text-gray-900">${v.salary ? v.salary.toLocaleString() + ' ₽' : 'По договоренности'}</span>
+                                <span class="text-brand-600 text-xs font-bold hover:underline">Подробнее →</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (e) {
+                console.error('Failed to load vacancies', e);
+            }
+        }
+
+        async function openVacancyDetail(vacancyId) {
+            try {
+                const res = await fetch(`${API_BASE}/vacancy/${vacancyId}`);
+                let v = null;
+                if (res.ok) {
+                    const json = await res.json();
+                    v = json.data || json;
+                } else {
+                    const allRes = await fetch(`${API_BASE}/vacancy/`);
+                    const allJson = await allRes.json();
+                    v = (allJson.data || []).find(item => item.id === vacancyId);
+                }
+
+                if (!v) { toast('Вакансия не найдена', 'error'); return; };
+
+                selectedVacancy = v;
+                document.getElementById('detailTitle').textContent = v.title;
+                document.getElementById('detailCompany').textContent = `Компания ID: ${v.company_id}`;
+                document.getElementById('detailExp').textContent = `${v.experience} лет`;
+                document.getElementById('detailSalary').textContent = v.salary ? v.salary.toLocaleString() + ' ₽' : 'По договоренности';
+                document.getElementById('detailStack').textContent = v.stack;
+                document.getElementById('detailReq').textContent = v.requirements;
+                document.getElementById('applyVacancyId').value = v.id;
+
+                const applySection = document.getElementById('applySection');
+                if (currentRole === 'applicant') {
+                    applySection.classList.remove('hidden');
+                } else {
+                    applySection.classList.add('hidden');
+                }
+
+                openModal('vacancyDetailModal');
+            } catch (e) {
+                console.error('Failed to open vacancy detail', e);
+                toast('Ошибка загрузки информации о вакансии', 'error');
+            }
+        }
+
+        async function submitApplicantApplication(e) {
+            e.preventDefault();
+            if (!token || currentRole !== 'applicant') {
+                toast('Пожалуйста, войдите в систему как соискатель для отклика с резюме.', 'warn');
+                switchTab('auth');
+                closeModal('vacancyDetailModal');
+                return;
+            }
+
+            const vacancy_id = document.getElementById('applyVacancyId').value;
+            const fileInput = document.getElementById('applicantResumeFile');
+            const file = fileInput.files[0];
+
+            if (!file) { toast('Пожалуйста, приложите файл резюме', 'warn'); return; };
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('vacancy_id', vacancy_id);
+            formData.append('applicant_id', currentUserData.id || '');
+
+            try {
+                const res = await fetch(`${API_BASE}/application/`, {
+                    method: 'POST',
+                    headers: {'Authorization': `Bearer ${token}`},
+                    body: formData
+                });
+                if (res.ok) {
+                    toast('Ваше резюме принято! Мы свяжемся с вами в ближайшее время.', 'success');
+                    closeModal('vacancyDetailModal');
+                    switchTab('my-applications');
+                } else {
+                    const err = await res.json();
+                    toast('Ошибка отклика: ' + (err.detail || 'Не удалось отправить резюме'), 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети при отправке отклика', 'error');
+            }
+        }
+
+        async function loadMyApplications() {
+            if (currentRole !== 'applicant') return;
+            try {
+                const res = await fetch(`${API_BASE}/application/`);
+                const json = await res.json();
+                const allApps = json.data || [];
+                const myApps = allApps.filter(a => a.applicant_id === currentUserData.id);
+
+                const tbody = document.getElementById('myApplicationsTableBody');
+                tbody.innerHTML = '';
+
+                if (myApps.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">Вы еще не откликались на вакансии. Выберите вакансию и отправьте резюме.</td></tr>`;
+                    return;
+                }
+
+                for (const app of myApps) {
+                    const score = app.evaluation_score !== null ? app.evaluation_score : '-';
+                    const badgeColor = score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200');
+                    
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="px-6 py-4 font-mono text-xs text-gray-700">${app.vacancy_id}</td>
+                            <td class="px-6 py-4"><span class="px-3 py-1 rounded-full text-xs font-black border ${badgeColor}">${score} / 100</span></td>
+                            <td class="px-6 py-4"><span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 uppercase">${app.status || 'new'}</span></td>
+                            <td class="px-6 py-4 text-right space-x-2">
+                                <button onclick="showSummary('Мой отклик', '${score}', \`${encodeURIComponent(app.evaluated_text || 'Резюме ожидает ИИ-оценки')}\`, '${app.id}', '${app.vacancy_id}')" class="text-brand-600 hover:text-brand-800 text-xs font-bold bg-brand-50 px-3 py-1.5 rounded-lg transition inline-flex items-center">
+                                    <i class="fa-solid fa-brain mr-1.5"></i>Саммари
+                                </button>
+                                <button onclick="downloadResume('${app.id}')" class="text-emerald-600 hover:text-emerald-800 text-xs font-bold bg-emerald-50 px-3 py-1.5 rounded-lg transition inline-flex items-center">
+                                    <i class="fa-solid fa-download mr-1.5"></i>Резюме
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (e) {
+                console.error('Failed to load my applications', e);
+            }
+        }
+
+        async function loadApplicants() {
+            if (currentRole !== 'hr') return;
+            try {
+                const res = await fetch(`${API_BASE}/applicant/`);
+                const json = await res.json();
+                const tbody = document.getElementById('applicantsTableBody');
+                tbody.innerHTML = '';
+                (json.data || []).forEach(a => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="px-6 py-4 font-semibold text-gray-900">${a.full_name}</td>
+                            <td class="px-6 py-4 text-gray-600">${a.email}</td>
+                            <td class="px-6 py-4 text-gray-600">${a.phone || '-'}</td>
+                            <td class="px-6 py-4 font-mono text-xs text-indigo-600 truncate max-w-xs">${a.resume_path || 'Нет файла'}</td>
+                            <td class="px-6 py-4 text-gray-500 text-xs">${new Date(a.created_at).toLocaleDateString()}</td>
+                        </tr>
+                    `;
+                });
+            } catch (e) {
+                console.error('Failed to load applicants', e);
+            }
+        }
+
+        async function loadLeaderboard() {
+            if (currentRole !== 'hr') return;
+            try {
+                let url = `${API_BASE}/application/`;
+                if (currentUserData.company_id) {
+                    url += `?company_id=${currentUserData.company_id}`;
+                }
+                const res = await fetch(url);
+                const json = await res.json();
+                const applications = json.data || [];
+                document.getElementById('leaderboardCount').textContent = `${applications.length} откликов`;
+
+                applications.sort((a, b) => (b.evaluation_score || 0) - (a.evaluation_score || 0));
+
+                const tbody = document.getElementById('leaderboardTableBody');
+                tbody.innerHTML = '';
+
+                if (applications.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Нет откликов для вашей компании. Загрузите резюме.</td></tr>`;
+                    return;
+                }
+
+                let rank = 1;
+                for (const app of applications) {
+                    const score = app.evaluation_score !== null ? app.evaluation_score : '-';
+                    const badgeColor = score >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (score >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200');
+                    
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="px-6 py-4 font-bold text-gray-700">#${rank++}</td>
+                            <td class="px-6 py-4 font-mono text-xs text-gray-900 font-semibold">${app.applicant_id.substring(0,8)}...</td>
+                            <td class="px-6 py-4 font-mono text-xs text-gray-500">${app.vacancy_id.substring(0,8)}...</td>
+                            <td class="px-6 py-4"><span class="px-3 py-1 rounded-full text-xs font-black border ${badgeColor}">${score} / 100</span></td>
+                            <td class="px-6 py-4"><span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 uppercase">${app.status || 'new'}</span></td>
+                            <td class="px-6 py-4 text-right space-x-1">
+                                <button onclick="analyzeSingleApplication('${app.id}')" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold bg-indigo-50 px-2.5 py-1.5 rounded-lg transition inline-flex items-center" title="Запустить ИИ-анализ">
+                                    <i class="fa-solid fa-brain mr-1"></i>Анализ
+                                </button>
+                                <button onclick="showSummary('${app.applicant_id}', '${score}', \`${encodeURIComponent(app.evaluated_text || 'Нет саммари')}\`, '${app.id}', '${app.vacancy_id}')" class="text-brand-600 hover:text-brand-800 text-xs font-bold bg-brand-50 px-2.5 py-1.5 rounded-lg transition inline-flex items-center" title="Просмотр саммари">
+                                    <i class="fa-solid fa-file-lines mr-1"></i>Саммари
+                                </button>
+                                <button onclick="downloadResume('${app.id}')" class="text-emerald-600 hover:text-emerald-800 text-xs font-bold bg-emerald-50 px-2.5 py-1.5 rounded-lg transition inline-flex items-center" title="Скачать резюме">
+                                    <i class="fa-solid fa-download mr-1"></i>Резюме
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (e) {
+                console.error('Failed to load leaderboard', e);
+            }
+        }
+
+        async function analyzeSingleApplication(appId) {
+            try {
+                const res = await fetch(`${API_BASE}/application/${appId}/analyze`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    toast('ИИ-анализ отклика успешно запущен!', 'success');
+                    showProgressCard(appId);
+                    loadLeaderboard();
+                } else {
+                    const err = await res.json();
+                    toast('Ошибка анализа: ' + (err.detail || 'Не удалось запустить ИИ'), 'error');
+                }
+            } catch (e) {
+                toast('Ошибка сети при запуске ИИ-анализа', 'error');
+            }
+        }
+
+        async function analyzeAllApplications() {
+            if (!currentUserData.company_id) { toast('Не указана компания HR', 'info'); return; };
+            try {
+                const res = await fetch(`${API_BASE}/application/${currentUserData.company_id}`, {
+                    method: 'POST'
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.data && json.data.batch_id) {
+                        toast(`Пакетный ИИ-анализ запущен для ${json.data.total} откликов!`, 'success');
+                        showProgressCard(json.data.batch_id);
+                        loadLeaderboard();
+                    } else {
+                        toast('Нет новых откликов для анализа', 'error');
+                    }
+                } else {
+                    toast('Ошибка запуска пакетного анализа', 'error');
+                }
+            } catch (e) {
+                toast('Ошибка сети при пакетном анализе', 'error');
+            }
+        }
+
+        async function summarizeAllApplications() {
+            try {
+                let url = `${API_BASE}/application/`;
+                if (currentUserData.company_id) url += `?company_id=${currentUserData.company_id}`;
+                const res = await fetch(url);
+                const json = await res.json();
+                const apps = json.data || [];
+                if (apps.length === 0) { toast('Нет откликов для создания суммарного отчёта', 'warn'); return; };
+
+                let totalScore = 0;
+                let evaluatedCount = 0;
+                let bestCandidate = null;
+                let maxScore = -1;
+                let summaryLines = [];
+
+                apps.forEach((app, idx) => {
+                    if (app.evaluation_score !== null && app.evaluation_score !== undefined) {
+                        totalScore += app.evaluation_score;
+                        evaluatedCount++;
+                        if (app.evaluation_score > maxScore) {
+                            maxScore = app.evaluation_score;
+                            bestCandidate = app;
+                        }
+                    }
+                    summaryLines.push(`${idx + 1}. Кандидат ${app.applicant_id.substring(0,8)}... | Скор: ${app.evaluation_score ?? 'нет'} | Статус: ${app.status}`);
+                });
+
+                const avgScore = evaluatedCount > 0 ? (totalScore / evaluatedCount).toFixed(1) : 0;
+                
+                const report = `📊 СУММАРНЫЙ ОТЧЁТ ПО ВСЕМ ОТКЛИКАМ:\n` +
+                               `• Всего откликов в базе: ${apps.length}\n` +
+                               `• Успешно проанализировано ИИ: ${evaluatedCount}\n` +
+                               `• Средний ИИ-скор по кандидатам: ${avgScore} / 100\n` +
+                               `• Топ-кандидат ID: ${bestCandidate ? bestCandidate.applicant_id : 'нет'} (Скор: ${maxScore})\n\n` +
+                               `Список откликов:\n` + summaryLines.join('\n');
+
+                showSummary('Сводный отчёт по компании', avgScore + ' / 100 (Средний)', report);
+            } catch (e) {
+                console.error('Failed to summarize all applications', e);
+                toast('Ошибка формирования суммарного отчёта', 'error');
+            }
+        }
+
+        async function downloadResume(applicationId) {
+            try {
+                const res = await fetch(`${API_BASE}/application/${applicationId}/download`);
+                if (res.ok) {
+                    const json = await res.json();
+                    const url = json.data.download_url;
+                    window.open(url, '_blank');
+                } else {
+                    toast('Файл резюме не найден в хранилище S3', 'error');
+                }
+            } catch (e) {
+                console.error('Download error', e);
+                toast('Ошибка скачивания резюме', 'error');
+            }
+        }
+
+        async function populateDropdowns() {
+            try {
+                let vacUrl = `${API_BASE}/vacancy/`;
+                if (currentRole === 'hr' && currentUserData.company_id) {
+                    vacUrl += `?company_id=${currentUserData.company_id}`;
+                }
+                const [compRes, vacRes, appRes] = await Promise.all([
+                    fetch(`${API_BASE}/company/`),
+                    fetch(vacUrl),
+                    fetch(`${API_BASE}/applicant/`)
+                ]);
+                const compData = await compRes.json();
+                const vacData = await vacRes.json();
+                const appData = await appRes.json();
+
+                const compSelect = document.getElementById('vacCompanyId');
+                if (compSelect) {
+                    compSelect.innerHTML = '';
+                    (compData.data || []).forEach(c => {
+                        compSelect.innerHTML += `<option value="${c.id}">${c.title} (${c.id.substring(0,8)}...)</option>`;
+                    });
+                    if (currentUserData.company_id) {
+                        compSelect.value = currentUserData.company_id;
+                    }
+                }
+
+                const uploadVacSelect = document.getElementById('uploadVacancyId');
+                if (uploadVacSelect) {
+                    uploadVacSelect.innerHTML = '';
+                    (vacData.data || []).forEach(v => {
+                        uploadVacSelect.innerHTML += `<option value="${v.id}">${v.title} (${v.stack})</option>`;
+                    });
+                }
+
+                const uploadAppSelect = document.getElementById('uploadApplicantId');
+                if (uploadAppSelect) {
+                    uploadAppSelect.innerHTML = '';
+                    (appData.data || []).forEach(a => {
+                        uploadAppSelect.innerHTML += `<option value="${a.id}">${a.full_name} (${a.email})</option>`;
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to populate dropdowns', e);
+            }
+        }
+
+        async function createCompany(e) {
+            e.preventDefault();
+            const title = document.getElementById('companyTitle').value;
+            const description = document.getElementById('companyDesc').value;
+            try {
+                const res = await fetch(`${API_BASE}/company/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({title, description, is_active: true})
+                });
+                if (res.ok) {
+                    closeModal('companyModal');
+                    loadCompanies();
+                } else {
+                    toast('Ошибка создания компании', 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети', 'error');
+            }
+        }
+
+        async function createVacancy(e) {
+            e.preventDefault();
+            const title = document.getElementById('vacTitle').value;
+            const stack = document.getElementById('vacStack').value;
+            const experience = parseFloat(document.getElementById('vacExp').value);
+            const salary = parseFloat(document.getElementById('vacSalary').value);
+            const company_id = document.getElementById('vacCompanyId').value || currentUserData.company_id;
+            const requirements = document.getElementById('vacReq').value;
+
+            try {
+                const res = await fetch(`${API_BASE}/vacancy/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({title, stack, experience, salary, company_id, requirements, is_active: true})
+                });
+                if (res.ok) {
+                    closeModal('vacancyModal');
+                    loadVacancies();
+                    loadDashboardStats();
+                } else {
+                    toast('Ошибка создания вакансии', 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети', 'error');
+            }
+        }
+
+        async function createApplicant(e) {
+            e.preventDefault();
+            const full_name = document.getElementById('appFullName').value;
+            const email = document.getElementById('appEmail').value;
+            const phone = document.getElementById('appPhone').value;
+            try {
+                const res = await fetch(`${API_BASE}/applicant/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({full_name, email, phone, password: "default_password"})
+                });
+                if (res.ok) {
+                    closeModal('applicantModal');
+                    loadApplicants();
+                    loadDashboardStats();
+                } else {
+                    toast('Ошибка регистрации кандидата', 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети', 'error');
+            }
+        }
+
+        async function uploadResumeFile(e) {
+            e.preventDefault();
+            const vacancy_id = document.getElementById('uploadVacancyId').value;
+            const applicant_id = document.getElementById('uploadApplicantId').value;
+            const fileInput = document.getElementById('uploadResumeFileObj');
+            const file = fileInput.files[0];
+
+            if (!file) { toast('Выберите файл резюме', 'info'); return; };
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('vacancy_id', vacancy_id);
+            formData.append('applicant_id', applicant_id);
+
+            try {
+                closeModal('uploadModal');
+                const res = await fetch(`${API_BASE}/application/`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    toast('Резюме загружено, ИИ-скрининг запущен в Celery!', 'success');
+                    showProgressCard(json.data.id);
+                    loadLeaderboard();
+                } else {
+                    const errJson = await res.json();
+                    toast('Ошибка: ' + (errJson.detail || 'Неизвестная ошибка'), 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети при загрузке', 'error');
+            }
+        }
+
+        function showProgressCard(appId) {
+            const card = document.getElementById('progressCard');
+            card.classList.remove('hidden');
+            document.getElementById('batchIdSpan').textContent = appId;
+            
+            let percent = 10;
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressPercent').textContent = `${percent}%`;
+
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/application/${appId}/status`);
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json.status === 'SUCCESS') {
+                            percent = 100;
+                            document.getElementById('progressBar').style.width = `100%`;
+                            document.getElementById('progressPercent').textContent = `100%`;
+                            document.getElementById('progressTitle').textContent = `ИИ-скрининг успешно завершен!`;
+                            clearInterval(interval);
+                            loadLeaderboard();
+                        } else if (json.status === 'PENDING') {
+                            percent = Math.min(percent + 15, 90);
+                            document.getElementById('progressBar').style.width = `${percent}%`;
+                            document.getElementById('progressPercent').textContent = `${percent}%`;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Status check error', e);
+                }
+            }, 2000);
+        }
+
+        async function showSummary(id, score, encodedText, applicationId = null, vacancyId = null) {
+            document.getElementById('modalCandidateName').textContent = id;
+            document.getElementById('modalCandidateScore').textContent = score;
+            document.getElementById('modalCandidateText').textContent = decodeURIComponent(encodedText);
+
+            // Vacancy link
+            const vacancyLink = document.getElementById('modalVacancyLink');
+            vacancyLink.textContent = vacancyId ? vacancyId.substring(0, 8) + '...' : '-';
+            vacancyLink.removeAttribute('href');
+            vacancyLink.title = vacancyId || '';
+            if (vacancyId) {
+                try {
+                    const vRes = await fetch(`${API_BASE}/vacancy/${vacancyId}`, {
+                        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                    });
+                    if (vRes.ok) {
+                        const vJson = await vRes.json();
+                        const v = vJson.data || vJson;
+                        vacancyLink.textContent = v.title || vacancyId.substring(0, 8) + '...';
+                        vacancyLink.title = v.title || vacancyId;
+                        vacancyLink.href = '#';
+                        vacancyLink.onclick = (e) => { e.preventDefault(); closeModal('summaryModal'); openVacancyDetail(vacancyId); };
+                    }
+                } catch (_) { /* leave as short ID */ }
+            }
+
+            const downloadBtn = document.getElementById('modalDownloadResumeBtn');
+            if (applicationId) {
+                downloadBtn.classList.remove('hidden');
+                downloadBtn.setAttribute('onclick', `downloadResume('${applicationId}')`);
+            } else {
+                downloadBtn.classList.add('hidden');
+            }
+
+            openModal('summaryModal');
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            try {
+                const res = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password})
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    token = json.access_token;
+                    localStorage.setItem('hr_token', token);
+                    
+                    await fetchMe();
+                    renderNavbar();
+                    applyRolePermissions();
+                    toast('Успешный вход в систему!', 'success');
+                    
+                    if (currentRole === 'hr') {
+                        switchTab('dashboard');
+                        loadDashboardStats();
+                        loadCompanies();
+                        loadApplicants();
+                        loadLeaderboard();
+                    } else if (currentRole === 'applicant') {
+                        switchTab('my-applications');
+                        loadMyApplications();
+                    } else {
+                        switchTab('vacancies');
+                    }
+                } else {
+                    const err = await res.json();
+                    toast('Ошибка входа: ' + (err.detail || 'Неверный email или пароль'), 'error');
+                }
+            } catch (err) {
+                toast('Ошибка авторизации', 'error');
+            }
+        }
+
+        async function handleRegHr(e) {
+            e.preventDefault();
+            const full_name = document.getElementById('regHrName').value;
+            const email = document.getElementById('regHrEmail').value;
+            const password = document.getElementById('regHrPassword').value;
+            const company_id = document.getElementById('regHrCompanyId').value;
+            try {
+                const res = await fetch(`${API_BASE}/auth/register/hr`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({full_name, email, password, company_id})
+                });
+                if (res.ok) {
+                    toast('HR успешно зарегистрирован! Теперь выполните вход в форме слева.', 'success');
+                } else {
+                    const err = await res.json();
+                    toast('Ошибка регистрации HR: ' + (err.detail || 'Неизвестная ошибка'), 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети', 'error');
+            }
+        }
+
+        async function handleRegApp(e) {
+            e.preventDefault();
+            const full_name = document.getElementById('regAppName').value;
+            const email = document.getElementById('regAppEmail').value;
+            const phone = document.getElementById('regAppPhone').value;
+            const password = document.getElementById('regAppPassword').value;
+            try {
+                const res = await fetch(`${API_BASE}/auth/register/applicant`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({full_name, email, phone, password})
+                });
+                if (res.ok) {
+                    toast('Соискатель успешно зарегистрирован! Теперь выполните вход в форме слева.', 'success');
+                } else {
+                    const err = await res.json();
+                    toast('Ошибка регистрации соискателя: ' + (err.detail || 'Неизвестная ошибка'), 'error');
+                }
+            } catch (err) {
+                toast('Ошибка сети', 'error');
+            }
+        }
+
+        function logout() {
+            token = '';
+            currentRole = '';
+            currentUserData = {};
+            localStorage.removeItem('hr_token');
+            localStorage.removeItem('hr_role');
+            localStorage.removeItem('hr_user_data');
+            renderNavbar();
+            applyRolePermissions();
+            switchTab('auth');
+            toast('Вы вышли из системы', 'success');
+        }
+    </script>
+</body>
+</html>

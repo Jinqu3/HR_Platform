@@ -19,5 +19,5 @@ class Company(Base):
         Boolean, default=0, comment="Активность вакансии", nullable=False
     )
 
-    vacancies: Mapped[list["Vacancy"]] = relationship("Vacancy", back_populates="company")  # type: ignore  # noqa: F821
-    recruiters: Mapped[list["Recruiter"]] = relationship("Recruiter", back_populates="company") # type: ignore  # noqa: F821
+    vacancies: Mapped[list["Vacancy"]] = relationship("Vacancy", back_populates="company_vacancy")  # type: ignore  # noqa: F821
+    recruiters: Mapped[list["Recruiter"]] = relationship("Recruiter", back_populates="company_recruiter") # type: ignore  # noqa: F821

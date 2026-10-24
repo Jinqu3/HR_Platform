@@ -1,0 +1,12 @@
+openai
+celery
+boto3
+pydantic-settings
+httpx
+requests
+python-dotenv
+redis
+loguru
+gevent
+pypdf
+python-docx

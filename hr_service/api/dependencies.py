@@ -1,9 +1,9 @@
 from typing import Annotated
 
 from fastapi import Depends
-from utils.db_manager import DBManager
 
 from hr_service.database import async_session
+from utils.db_manager import DBManager
 
 
 async def get_db():

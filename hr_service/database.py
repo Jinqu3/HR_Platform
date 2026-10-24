@@ -1,13 +1,14 @@
-from uuid import UUID as uuid, uuid4
+from uuid import UUID as uuid
+from uuid import uuid4
 
-
-from config import settings  # type: ignore
 from sqlalchemy import UUID
 from sqlalchemy.ext.asyncio import (  # type: ignore
     async_sessionmaker,
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column  # type: ignore
+
+from hr_service.config import settings  # type: ignore
 
 engine = create_async_engine(settings.DB_URL, echo=True)
 async_session = async_sessionmaker(engine, expire_on_commit=False)

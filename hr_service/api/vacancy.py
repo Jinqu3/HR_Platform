@@ -1,17 +1,17 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body
-from schemas.vacancy import VacancyCreate, VacancyPatch, VacancyUpdate
-from service.vacancy import VacancyService
 
 from hr_service.api.dependencies import DBDep
+from schemas.vacancy import VacancyCreate, VacancyPatch, VacancyUpdate
+from service.vacancy import VacancyService
 
 router = APIRouter(prefix="/vacancy", tags=["vacancy"])
 
 
 @router.get("/")
-async def get_vacancies(db: DBDep):
-    vacancies = await VacancyService(db).get_vacancies()
+async def get_vacancies(db: DBDep, company_id: UUID | None = None):
+    vacancies = await VacancyService(db).get_vacancies(company_id=company_id)
     return {"data": vacancies}
 
 

@@ -15,18 +15,14 @@ class Applicant(Base):
     email: Mapped[str] = mapped_column(
         String(255), unique=True, nullable=False, comment="Email соискателя"
     )
+    hashed_password: Mapped[str] = mapped_column(
+        String(255), nullable=True, comment="Хэш пароля"
+    )
     phone: Mapped[str | None] = mapped_column(
         String(50), nullable=True, comment="Телефон соискателя"
     )
-
-    resume_text: Mapped[str | None] = mapped_column(
-        Text, nullable=True, comment="Текст резюме"
-    )
     resume_path: Mapped[str | None] = mapped_column(
-        String(500), nullable=True, comment="Путь к файлу (S3)"
-    )
-    skills: Mapped[str | None] = mapped_column(
-        Text, nullable=True, comment="Навыки соискателя"
+        Text, nullable=True, comment="Путь к резюме"
     )
 
     created_at: Mapped[datetime] = mapped_column(

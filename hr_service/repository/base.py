@@ -34,7 +34,7 @@ class BaseRepository:
         return self.mapper.map_to_domain_entity(res) if self.mapper else res
 
     async def delete(self, *filter, **filter_by):
-        if not await self.get_one(*filter, **filter_by):
+        if not await self.get_one_or_none(*filter, **filter_by):
             raise NoResultFound
 
         stmt = delete(self.model).filter(*filter).filter_by(**filter_by)
@@ -43,7 +43,7 @@ class BaseRepository:
     async def update(
         self, data: BaseModel, is_patch: bool = False, *filter, **filter_by
     ):
-        if not await self.get_one(*filter, **filter_by):
+        if not await self.get_one_or_none(*filter, **filter_by):
             raise NoResultFound
 
         stmt = (
